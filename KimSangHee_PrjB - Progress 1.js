@@ -1,49 +1,56 @@
-// JavaScript has no 'class-defining' statements or declarations: instead we
-// simply create a new object type by defining its constructor function, and
-// add member methods/functions using JavaScript's 'prototype' feature.
-//
-// The object prototypes below (and their comments) are suitable for any and all
-// features described in the Ray-Tracing Project Assignment Sheet.
-//
-// HOWEVER, they're not required, nor even particularly good:
-//				(notably awkward style from their obvious C/C++ origins) 
-// They're here to help you get 'started' on better code of your own,
-// and to help you avoid common structural 'traps' in writing ray-tracers
-//		that might otherwise force ugly/messy refactoring later, such as:
-//  --lack of a well-polished vector/matrix library; e.g. open-source glmatrix.js
-//  --lack of floating-point RGB values to compute light transport accurately,
-//	--no distinct 'camera', 'image', and 'window' objects to separate lengthy 
-//		ray-tracing calculations from screen display and refresh.
-//	--lack of ray-trace image-buffer; window resize shouldn't discard your work! 
-//  --lack of texture-mapped image display; permit ray-traced image of any 
-//		resolution to display on any screen at any desired image size
-//  --the need to describe geometry/shape independently from surface materials,
-//		and to select material(s) for each shape from a list of materials
-//  --materials that permit procedural 3D textures, turbulence & Perlin Noise,  //	--need to describe light sources independently, and possibly inherit their
-//		location from a geometric shape (e.g. a light-bulb shape).
-//  --need to create a sortable LIST of ray/object hit-points, and not just
-//		the intersection nearest to the eyepoint, to enable shape-creation by
-//		Constructive Solid Geometry (CSG), and to streamline transparency effects
-//  --functions organized well to permit easy recursive ray-tracing:  don't 
-//		tangle together ray/object intersection-finding tasks with shading, 
-//		lighting, and materials-describing tasks.(e.g. traceRay(), findShade() )
-//	--the need to match openGL/WebGL functions with ray-tracing results. 
-//		Do it by constructing matching ray-tracing functions for cameras, views, 
-//		transformations, lighting, and materials (e.g. rayFrustum(), rayLookAt(); //		rayTranlate(), rayRotate(), rayScale()...)
-//  --need straightforward method to implement scene graphs & jointed objects. 
-//		Do it by transforming world-space rays to model coordinates, rather than 
-//		models to world coords, using a 4x4 worl2model matrix stored in each 
-//		model (each CGeom primitive).  Set it by OpenGL-like functions 
-//		rayTranslate(), rayRotate(), rayScale(), etc.
+//SangHee Kim
+//shk172
+//Northwestern University
+//EECS 395 - Intermediate Graphics
+//Project B - Ray Tracing
 
+
+// --Side-by-Side display: WebGL preview on left, ray-traced result on right (see starter code).
+
+// --Camera (defined at origin) looks at xy grid-plane in cam coordinates; grid has adjustable z-value depth. Set up most-basic ray/plane intersection. 
+// Do not attempt any ray transformations yet (no tilted grid-plane!)
+
+// --Organize: initial ‘stub’ functions and prototypes for camera, ray, hit, hitlist, shape, material, etc:
+
+// --add user-adjustable antialiasing from within camera prototype; implement jittered super-sampling
+
+// --construct rayPerspective() and rayFrustum() function to specify ray-tracing cameras with thesame arguments as gl.perspective() and gl.frustum().
+
+
+// Vertex shader program for Ray Tracing
+var VSHADER_SOURCE =
+	'attribute vec4 a_Position;\n' +	
+	'attribute vec3 a_Color; \n' +
+
+	'uniform mat4 u_ViewMatrix;\n' +
+	'uniform mat4 u_ProjMatrix;\n' +
+
+	'varying vec4 v_Color; \n' +
+
+	'void main() {\n' +
+	'	gl_Position = u_ProjMatrix* u_ViewMatrix * a_Position;  \n' +	
+	'	v_Color = vec4(a_Color, 1.0); \n' +
+ 	'}\n';
+
+//Fragment shader program for Ray Tracing
+var FSHADER_SOURCE =
+  '#ifdef GL_ES\n' +
+  'precision mediump float;\n' +
+  '#endif\n' +
+
+  'varying vec4 v_Color;\n' +
+
+  'void main() {\n' +
+  '		gl_FragColor = v_Color; \n' +
+  '}\n';
 
 function CRay() {
 //==============================================================================
 // Object for a ray in an unspecified coord. system (usually 'world' coords).
 	this.orig = vec4.fromValues(0,0,0,1);			// Ray starting point (x,y,z,w)
-																						// (default: at origin
+													// (default: at origin
 	this.dir = 	vec4.fromValues(0,0,-1,0);			// The ray's direction vector 
-																						// (default: look down -z axis)
+													// (default: look down -z axis)
 }
 
 CRay.prototype.printMe = function(name) {
@@ -66,8 +73,8 @@ function CCamera() {
 // Default settings: put camera eye-point at world-space origin, and
 	this.eyePt = vec4.fromValues(0,0,0,1);
 	this.uAxis = vec4.fromValues(1,0,0,0);	// camera U axis == world x axis			
-  this.vAxis = vec4.fromValues(0,1,0,0);	// camera V axis == world y axis
-  this.nAxis = vec4.fromValues(0,0,1,0);	// camera N axis == world z axis.
+	this.vAxis = vec4.fromValues(0,1,0,0);	// camera V axis == world y axis
+	this.nAxis = vec4.fromValues(0,0,1,0);	// camera N axis == world z axis.
 		  	// (and thus we're gazing down the -Z axis with default camera). 
 
 // b) --  Camera 'intrinsic' parameters that set the camera's optics and images.
@@ -107,7 +114,9 @@ function CCamera() {
 CCamera.prototype.setEyeRay = function(myeRay, xpos, ypos) {
 //==============================================================================
 // Set values of a CRay object to specify a ray in world coordinates that 
-// originates at the camera's eyepoint (its center-of-projection: COP) and aims // in the direction towards the image-plane location (xpos,ypos) given in units // of pixels.  The ray's direction vector is *NOT* normalized.
+// originates at the camera's eyepoint (its center-of-projection: COP) and aims 
+// in the direction towards the image-plane location (xpos,ypos) given in units 
+// of pixels.  The ray's direction vector is *NOT* normalized.
 //
 // !CAREFUL! Be SURE you understand these floating-point xpos,ypos arguments!
 // For the default CCamera (+/-45 degree FOV, xmax,ymax == 256x256 resolution) 
@@ -136,15 +145,15 @@ CCamera.prototype.setEyeRay = function(myeRay, xpos, ypos) {
 //     bilinear filter, Mitchell-Netravali piecewise bicubic prefilter, etc).
 
 // Convert image-plane location (xpos,ypos) in the camera's U,V,N coords:
-var posU = this.iLeft + xpos*this.ufrac; 	// U coord,
-var posV = this.iBot  + ypos*this.vfrac;	// V coord,
+	var posU = this.iLeft + xpos*this.ufrac; 	// U coord,
+	var posV = this.iBot  + ypos*this.vfrac;	// V coord,
 //  and the N coord is always -1, at the image-plane (zNear) position.
 // Then convert this point location to world-space X,Y,Z coords using our 
 // camera's unit-length coordinate axes uAxis,vAxis,nAxis
- xyzPos = vec4.create();    // make vector 0,0,0,0.	
+	xyzPos = vec4.create();    // make vector 0,0,0,0.	
 	vec4.scaleAndAdd(xyzPos,xyzPos, this.uAxis, posU); // xyzPos += Uaxis * posU;
 	vec4.scaleAndAdd(xyzPos,xyzPos, this.vAxis, posV); // xyzPos += Vaxis * posU;
-  vec4.scaleAndAdd(xyzPos, xyzPos, this.nAxis, -this.iNear); 
+	vec4.scaleAndAdd(xyzPos, xyzPos, this.nAxis, -this.iNear); 
   // 																								xyzPos += Naxis * (-1)
   // NEXT, WE --COULD-- 
   // finish converting from UVN coordinates to XYZ coordinates: we made a
@@ -157,6 +166,14 @@ var posV = this.iBot  + ypos*this.vfrac;	// V coord,
   //				myeRay.dir = (xyzPos + eyePt) - eyePt = xyzPos; thus
 	vec4.copy(myeRay.orig, this.eyePt);	
 	vec4.copy(myeRay.dir, xyzPos);
+}
+
+CCamera.prototype.makeCamera = function(){
+
+}
+
+CCamera.prototype.makeRay = function(xPos, yPos){
+
 }
 
 // allowable values for CGeom.shapeType variable.  Add some of your own!
@@ -204,6 +221,12 @@ function CGeom(shapeSelect) {
 	this.lineWidth = 0.1;	// fraction of xgap used for grid-line width
 	this.lineColor = vec4.fromValues(0.1,0.5,0.1,1.0);	// RGBA green(A== opacity)
 	this.gapColor = vec4.fromValues( 0.9,0.9,0.9,1.0);	// near-white
+	if(shapeSelect == JT_GNDPLANE){
+		this.shapeArray = makeGroundGrid();
+	}
+	else if(shapeSelect == JT_BOX){
+
+	}
 }
 
 CGeom.prototype.traceGrid = function(inRay) {
@@ -269,46 +292,6 @@ function CImgBuf(wide, tall) {
 	this.fBuf = new Float32Array(this.xSiz * this.ySiz * this.pixSiz);
 }
 
-CImgBuf.prototype.setTestPattern = function(pattNum) {
-//==============================================================================
-// Replace current 8-bit RGB contents of 'imgBuf' with a colorful pattern
-	// 2D color image:  8-bit unsigned integers in a 256*256*3 array
-	// to store r,g,b,r,g,b integers (8-bit)
-	// In WebGL texture map sizes MUST be a power-of-two (2,4,8,16,32,64,...4096)
-	// with origin at lower-left corner
-	// (NOTE: this 'power-of-two' limit will probably vanish in a few years of
-	// WebGL advances, just as it did for OpenGL)
-	
-  // use local vars to set the array's contents.
-  for(var j=0; j< this.ySiz; j++) {						// for the j-th row of pixels
-  	for(var i=0; i< this.xSiz; i++) {					// and the i-th pixel on that row,
-	  	var idx = (j*this.xSiz + i)*this.pixSiz;// Array index at pixel (i,j) 
-	  	switch(pattNum) {
-	  		case 0:	//================(Colorful L-shape)============================
-			  	if(i < this.xSiz/4 || j < this.ySiz/4) {
-			  		this.iBuf[idx   ] = i;								// 0 <= red <= 255
-			  		this.iBuf[idx +1] = j;								// 0 <= grn <= 255
-			  	}
-			  	else {
-			  		this.iBuf[idx   ] = 0;
-			  		this.iBuf[idx +1] = 0;
-			  		}
-			  	this.iBuf[idx +2] = 255 -i -j;								// 0 <= blu <= 255
-			  	break;
-			  case 1: //================(bright orange)===============================
-			  	this.iBuf[idx   ] = 255;	// bright orange
-			  	this.iBuf[idx +1] = 128;
-			  	this.iBuf[idx +2] =   0;
-	  			break;
-	  		default:
-	  			console.log("imgBuf.setTestPattern() says: WHUT!?");
-	  		break;
-	  	}
-  	}
-  }
-  this.int2float();		// fill the floating-point buffer with same test pattern.
-}
-
 CImgBuf.prototype.int2float = function() {
 //==============================================================================
 // Convert current integerRGB image in iBuf into floating-point RGB image in fBuf
@@ -345,41 +328,7 @@ for(var j=0; j< this.ySiz; j++) {		// for each scanline
   }
 }
 
-CImgBuf.prototype.makeRayTracedImage = function() {
-//==============================================================================
-// TEMPORARY!!!! 
-// THIS FUNCTION SHOULD BE A MEMBER OF YOUR CScene OBJECTS (when you make them),
-// and NOT a member of CImgBuf OBJECTS!
-//
-// Create an image by Ray-tracing.   (called when you press 'T' or 't')
-
-  var eyeRay = new CRay();	// the ray we trace from our camera for each pixel
-  var myCam = new CCamera();	// the 3D camera that sets eyeRay values
-  var myGrid = new CGeom(JT_GNDPLANE);
-  var colr = vec4.create();	// floating-point RGBA color value
-	var hit = 0;
-	
-  for(var j=0; j< this.ySiz; j++) {						// for the j-th row of pixels
-  	for(var i=0; i< this.xSiz; i++) {					// and the i-th pixel on that row,
-	  	var idx = (j*this.xSiz + i)*this.pixSiz;	// Array index at pixel (i,j) 
-			myCam.setEyeRay(eyeRay,i,j);						  // create ray for pixel (i,j)
-			hit = myGrid.traceGrid(eyeRay);						// trace ray to the grid
-			if(hit==0) {
-				vec4.copy(colr, myGrid.gapColor);
-			}
-			else if (hit==1) {
-				vec4.copy(colr, myGrid.lineColor);
-			}
-	  	this.fBuf[idx   ] = colr[0];	// bright blue
-	  	this.fBuf[idx +1] = colr[1];
-	  	this.fBuf[idx +2] = colr[2];
-	  	}
-  	}
-  this.float2int();		// create integer image from floating-point buffer.
-}
-
-/*
-function CScene() {
+function CScene(CCamera, items) {
 //==============================================================================
 // A complete ray tracer object prototype (formerly a C/C++ 'class').
 //      My code uses just one CScene instance (myScene) to describe the entire 
@@ -433,17 +382,44 @@ function CScene() {
 // --item[0] is a unit sphere at the origin that uses matter[0] material;
 // --matter[0] material is a shiny red Phong-lit material, lit by lamp[0];
 // --lamp[0] is a point-light source at location (5,5,5).
+	this.imageBuffer = CImgBuf;
+	// this.eyeRay = CRay;
+	// this.eyeHits = CHitList;
+	this.camera = CCamera;
+	this.items = items;
+	// this.matter = CMatlList;
+	// this.lamp = CLightList;
 
-/*
-	*
-	*
-	*
-	  YOU WRITE THIS!  
-	*
-	*
-	*
-	*
-	*/
+	
+}
+
+CScene.prototype.makeRayTracedImage = function() {
+//==============================================================================
+// Create an image by Ray-tracing.   (called when you press 'T' or 't')
+
+	var eyeRay = new CRay();	// the ray we trace from our camera for each pixel
+	var myCam = new CCamera();	// the 3D camera that sets eyeRay values
+	var myGrid = new CGeom(JT_GNDPLANE);
+	var colr = vec4.create();	// floating-point RGBA color value
+	var hit = 0;
+	
+  	for(var j=0; j< this.ySiz; j++) {						// for the j-th row of pixels
+  		for(var i=0; i< this.xSiz; i++) {					// and the i-th pixel on that row,
+		  	var idx = (j*this.xSiz + i)*this.pixSiz;	// Array index at pixel (i,j) 
+			myCam.setEyeRay(eyeRay,i,j);						  // create ray for pixel (i,j)
+			hit = myGrid.traceGrid(eyeRay);						// trace ray to the grid
+			if(hit==0) {
+				vec4.copy(colr, myGrid.gapColor);
+			}
+			else if (hit==1) {
+				vec4.copy(colr, myGrid.lineColor);
+			}
+		  	this.fBuf[idx   ] = colr[0];	// bright blue
+		  	this.fBuf[idx +1] = colr[1];
+		  	this.fBuf[idx +2] = colr[2];
+	  	}
+  	}
+  	this.float2int();		// create integer image from floating-point buffer.
 }
 
 function CHit() {
@@ -481,15 +457,247 @@ function CHitList() {
 //      CAREFUL! *YOU* must prevent buffer overflow! Keep iEnd<= JT_HITLIST_MAX!
 //  -- 'iNearest' index selects the CHit object nearest the ray's origin point.
 
-/*
-	*
-	*
-	*
-	  YOU WRITE THIS!  
-	*
-	*
-	*
-	*
-	*/
+
 }
-*/
+
+var rayTracing = 0;
+
+function main(){
+		
+
+	var canvas = document.getElementById('webgl');
+
+  // Get the rendering context for WebGL
+  	var gl = getWebGLContext(canvas);
+  	if (!gl) {
+    	console.log('Failed to get the rendering context for WebGL');
+    	return;
+  	}
+
+  // Initialize shaders
+  	if (!initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE)) {
+    	console.log('Failed to intialize shaders.');
+    	return;
+  	}
+
+  // get the storage locations of u_ViewMatrix and u_ProjMatrix
+  	var u_ViewMatrix = gl.getUniformLocation(gl.program, 'u_ViewMatrix');
+ 	var u_ProjMatrix = gl.getUniformLocation(gl.program, 'u_ProjMatrix');
+  	if (!u_ViewMatrix || !u_ProjMatrix) { 
+    	console.log('Failed to get the storage location of u_ViewMatrix and/or u_ProjMatrix');
+    	return;
+  	}
+  	var viewMatrix = new Matrix4();
+  	var projMatrix = new Matrix4();
+	viewMatrix.setLookAt(0.1, 0, 5, //Camera origin
+  						0, 0, 0, //look-at point
+  						0, 0, 1); //View-up vector
+  	projMatrix.setPerspective(45, 1, 1, 100);
+
+  // Pass the view and projection matrix to u_ViewMatrix, u_ProjMatrix
+  	gl.uniformMatrix4fv(u_ViewMatrix, false, viewMatrix.elements);
+  	gl.uniformMatrix4fv(u_ProjMatrix, false, projMatrix.elements);
+
+
+
+
+
+
+  	ray = new CRay();
+  	camera = new CCamera();
+  	groundPlane = new CGeom(JT_GNDPLANE);
+  	items = [];
+  	items[0] = groundPlane;
+  	scene = new CScene(camera, items);
+  	initPreviewBuffers(gl, scene.items[0].shapeArray);
+
+	gl.clearColor(0.0, 0.0, 0.0, 1.0);		
+	draw(gl,scene);
+}
+
+function initPreviewBuffers(gl, shapeArray){
+	var shapeBuffers = gl.createBuffer();
+	if(!shapeBuffers){
+		console.log('Failed to create buffer object');
+		return -1;
+	}
+	//Bind buffers
+	gl.bindBuffer(gl.ARRAY_BUFFER, shapeBuffers)
+	gl.bufferData(gl.ARRAY_BUFFER, shapeArray, gl.STATIC_DRAW);
+	var FSIZE = shapeArray.BYTES_PER_ELEMENT;
+
+	var a_PositionID = gl.getAttribLocation(gl.program, 'a_Position');
+	if (a_PositionID < 0){
+	    console.log('Failed to get the GPU storage location of a_Position');
+    	return -1;
+  	}
+  	gl.vertexAttribPointer(a_PositionID, 4, gl.FLOAT, false, FSIZE*6, 0);
+  	gl.enableVertexAttribArray(a_PositionID);  
+
+  //---------------------------
+  // Get the storage location of a_Color attribute: assign & enable buffer
+  	var a_ColorID = gl.getAttribLocation(gl.program, 'a_Color');
+  	if (a_ColorID < 0) {
+    	console.log('Failed to get the GPU storage location of a_Color');
+    	return -1;
+  	}
+  // Assign the buffer object to a_Color variable
+  	gl.vertexAttribPointer(a_ColorID, 3, gl.FLOAT, false, FSIZE*6, FSIZE*3);
+  	gl.enableVertexAttribArray(a_ColorID);  
+    //---------------------------
+}
+
+function initTextures(gl, n) {
+//==============================================================================
+  var textureID = gl.createTexture();   // Create a texture object 
+  if (!textureID) {
+    console.log('Failed to create the texture object on the GPU');
+    return false;
+  }
+
+  // Get the storage location of u_Sampler
+  var u_SamplerID = gl.getUniformLocation(gl.program, 'u_Sampler');
+  if (!u_SamplerID) {
+    console.log('Failed to get the GPU storage location of u_Sampler');
+    return false;
+  }
+ 
+	// 2D color image:  8-bit unsigned integers in a 256*256*3 array
+	// to store r,g,b,r,g,b integers (8-bit)
+	// WebGL texture map sizes MUST be a power-of-two (2,4,8,16,32,64,...4096)
+	// with origin at lower-left corner
+	var imgXmax = 256;
+	var imgYmax = 256;
+  myImg = new Uint8Array(imgXmax*imgYmax*3);	// r,g,b; r,g,b; r,g,b pixels
+
+  for(var j=0; j< imgYmax; j++) {					// for the j-th row of pixels
+  	for(var i=0; i< imgXmax; i++) {				// and the i-th pixel on that row,
+	  	var idx = (j*imgXmax + i)*3;					// pixel (i,j) array index (red)
+	  	if(i<imgXmax/4 || j<imgYmax/4) {
+	  		myImg[idx   ] = i;								// 0 <= red <= 255
+	  		myImg[idx +1] = j;								// 0 <= grn <= 255
+	  	}
+	  	myImg[idx +2] = 255 -i -j;								// 0 <= blu <= 255
+  	}
+  }
+  // Enable texture unit0 for our use
+  gl.activeTexture(gl.TEXTURE0);
+  // Bind the texture object we made in initTextures() to the target
+	gl.bindTexture(gl.TEXTURE_2D, textureID);
+  // allocate memory and load the texture image into the GPU
+	gl.texImage2D(gl.TEXTURE_2D, 	//  'target'--the use of this texture
+  							0, 							//  MIP-map level (default: 0)
+  							gl.RGB, 				// GPU's data format (RGB? RGBA? etc)
+							256,						// image width in pixels,
+							256,						// image height in pixels,
+							0,							// byte offset to start of data
+  							gl.RGB, 				// source/input data format (RGB? RGBA?)
+  							gl.UNSIGNED_BYTE, 	// data type for each color channel				
+								myImg);	// data source.
+								
+  // Set the WebGL texture-filtering parameters
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  // Set the texture unit 0 to be driven by the sampler
+	gl.uniform1i(u_SamplerID, 0);
+	return true;									// done.
+}
+
+function draw(gl, scene){
+	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	gl.viewport(0,  						// Viewport lower-left corner
+	 			0,							// (x,y) location(in pixels)
+  				gl.drawingBufferWidth/2, 	// viewport width, height.
+   				gl.drawingBufferHeight);
+	gl.drawArrays(gl.LINES, 0, scene.items[0].shapeArray.length/7); 
+ 	//------------------------------------------
+  // Draw in the RIGHT viewport:
+  //------------------------------------------
+  	if(rayTracing == 1){
+	    for(i = 0; i < camera.xmax; i++){
+	  		for(j = 0; j < camera.ymax; j++){
+	  			camera.setEyeRay(ray, i,j);
+	  		}
+	  	}
+	}
+	// gl.viewport(gl.drawingBufferWidth/2, 				// Viewport lower-left corner
+	// 					0, 															// location(in pixels)
+ //  						gl.drawingBufferWidth/2, 				// viewport width, height.
+ //  						gl.drawingBufferHeight);
+	// gl.drawArrays(gl.LINES, 0, scene.items[0].shapeArray.length/7); 	// Draw the textured rectangle
+ //  //----------------------------------------- 
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function makeGroundGrid() {
+//==============================================================================
+// Create a list of vertices that create a large grid of lines in the x,y plane
+// centered at x=y=z=0.  Draw this shape using the GL_LINES primitive.
+
+	var xcount = 100;			// # of lines to draw in x,y to make the grid.
+	var ycount = 100;		
+	var xymax	= 50.0;			// grid size; extends to cover +/-xymax in x and y.
+ 	
+	// Create an (global) array to hold this ground-plane's vertices:
+	gndVerts = new Float32Array((xcount+ycount)*7*2);
+						// draw a grid made of xcount+ycount lines; 2 vertices per line.
+						
+	var xgap = xymax/(xcount-1);		// HALF-spacing between lines in x,y;
+	var ygap = xymax/(ycount-1);		// (why half? because v==(0line number/2))
+	
+	// First, step thru x values as we make vertical lines of constant-x:
+	for(v=0, j=0; v<2*xcount; v++, j+= 6) {
+		if(v%2==0) {	// put even-numbered vertices at (xnow, -xymax, 0)
+			gndVerts[j  ] = -xymax + (v  )*xgap;	// x
+			gndVerts[j+1] = -xymax;					// y
+			gndVerts[j+2] = -5.0;					// z
+		}
+		else {				// put odd-numbered vertices at (xnow, +xymax, 0).
+			gndVerts[j  ] = -xymax + (v-1)*xgap;	// x
+			gndVerts[j+1] = xymax;					// y
+			gndVerts[j+2] = -5.0;					// z
+		}
+		gndVerts[j+3] = 1;			// red
+		gndVerts[j+4] = 1;			// grn
+		gndVerts[j+5] = 1;			// blu
+	}
+	// Second, step thru y values as wqe make horizontal lines of constant-y:
+	// (don't re-initialize j--we're adding more vertices to the array)
+	for(v=0; v<2*ycount; v++, j+= 6) {
+		if(v%2==0) {		// put even-numbered vertices at (-xymax, ynow, 0)
+			gndVerts[j  ] = -xymax;					// x
+			gndVerts[j+1] = -xymax + (v  )*ygap;	// y
+			gndVerts[j+2] = -5.0;					// z
+		}
+		else {					// put odd-numbered vertices at (+xymax, ynow, 0).
+			gndVerts[j  ] = xymax;					// x
+			gndVerts[j+1] = -xymax + (v-1)*ygap;	// y
+			gndVerts[j+2] = -5.0;					// z
+		}
+		gndVerts[j+3] = 1;			// red
+		gndVerts[j+4] = 1;			// grn
+		gndVerts[j+5] = 1;			// blu
+	}
+	return gndVerts;
+}
+
+function normalize(v){
+  var mag = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+  return [v[0]/ mag, v[1]/mag, v[2]/mag];
+}
+function crossProduct(x1, x2, x3, y1, y2, y3){
+  return [x2*y3-x3*y2, x3*y1-x1*y3, x1*y2-x2*y1];
+}
